@@ -1,0 +1,41 @@
+# Dataset configuration. All paths are relative to the project root.
+dataset_version: "v2-reviewed-20260923"
+
+raw_pdf_dir: DataSet                       # original PDFs (read-only; never modified)
+# v2: every certificate re-read from its page image (scripts/build_truth_v2.py;
+# changes + reasons in annotations/truth_v2/changelog.jsonl). v1 stays untouched.
+truth_file: annotations/truth_v2/ground_truth_v2.jsonl
+canonical_truth_v1: ground_truth_98_clean.jsonl   # read-only; never modified
+
+# Target document types for Intermediate extraction training.
+target_document_types:
+  - "Intermediate certificate"
+
+rendering:
+  # Pages are rendered so that the longer side is at most `max_long_side_px`,
+  # but never upsampled beyond the native resolution of the embedded scan
+  # (plus a small floor so tiny scans stay readable).
+  max_long_side_px: 3000
+  min_long_side_px: 1600
+  image_format: png
+  output_dir: data/processed/pages
+
+split:
+  # FROZEN since v1: the v2 truth covers the same 98 files and the same student
+  # groups, so data/split.json is kept unchanged (re-running make_split.py with
+  # v2 strata would move documents between partitions).
+  frozen: true
+  seed: 20240917
+  # The existing deterministic split sizes. Only target-type documents with a
+  # truth record are split.
+  sizes: {train: 77, validation: 10, test: 10}
+  manifest_dir: data
+  # Documents from the same student (see dataset_audit.json duplicate groups)
+  # are forced into the same partition to prevent leakage.
+  group_by_student: true
+
+duplicates:
+  # Perceptual hash hamming distance at or below this -> near-duplicate image.
+  phash_near_dup_threshold: 10
+  # Normalized name similarity at or above this -> probable same person.
+  name_similarity_threshold: 0.90

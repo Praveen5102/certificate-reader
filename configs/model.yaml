@@ -1,0 +1,18 @@
+# Token-classification model over OCR words + boxes.
+#
+# Recommended: LiLT (Language-independent Layout Transformer) with a RoBERTa-base
+# text encoder.
+#   * license: MIT (LayoutLMv3 weights are CC BY-NC-SA 4.0 = non-commercial)
+#   * text + 2-D layout only: no image backbone, so it trains on CPU and its
+#     inputs are exactly what the OCR layer already produces
+#   * ~131M parameters; fine-tuned end-to-end (small data: few epochs, low LR,
+#     optional freezing of lower layers as a parameter-efficient variant)
+family: lilt                                   # lilt | layoutlmv3 (non-commercial license; research only)
+base_checkpoint: SCUT-DLVCLab/lilt-roberta-en-base
+max_seq_length: 512
+window_stride: 128                             # overlap between windows when a page exceeds max_seq_length
+bbox_scale: 1000                               # boxes normalized to 0..1000 per page
+label_all_subwords: false                      # label first sub-token only; others -100
+# Parameter-efficient option: freeze embeddings and the lowest N encoder layers.
+freeze_embeddings: false
+freeze_lower_layers: 0

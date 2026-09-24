@@ -1,0 +1,21 @@
+# ---- PERSONAL DATA: never commit (student names, hall tickets, Aadhaar numbers) ----
+DataSet/
+ground_truth_*.jsonl
+data/
+annotations/
+reports/
+experiments/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# ---- environment / caches ----
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---- model: only the split fp16 parts are committed; the joined file is rebuilt at startup ----
+deploy/model/model.safetensors
+deploy/model/model.safetensors.tmp

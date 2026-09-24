@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certificate-ml"
+version = "0.1.0"
+description = "Structured extraction from Telangana / Andhra Pradesh Intermediate certificates (OCR + layout model)"
+requires-python = ">=3.10"
+dependencies = [
+  "pymupdf>=1.24", "numpy>=1.26", "pillow>=10", "pydantic>=2.6", "PyYAML>=6", "RapidFuzz>=3.6",
+  "ImageHash>=4.3", "rapidocr>=3.0", "onnxruntime>=1.17", "torch>=2.2", "transformers>=4.40",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

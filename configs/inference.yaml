@@ -1,0 +1,21 @@
+# Inference configuration.
+tagger: model                  # rule_baseline | model
+model_dir: deploy/model        # exp_004 exported by scripts/export_model.py (fp16 parts; identical outputs on train/val)
+table_fallback: null           # rule_baseline: use the rule table when the model table does not match the printed total (no gain measured on train/val)
+
+rendering:                     # same policy as training data
+  max_long_side_px: 3000
+  min_long_side_px: 1600
+
+ocr_config: configs/ocr.yaml
+fields_config: configs/fields.yaml
+
+review:
+  # PROVISIONAL thresholds. Confidence scores are not yet calibrated; these must
+  # be fitted on the VALIDATION split (never the test split) after training.
+  high_confidence: 0.90        # >= : automatic (if no validation issue touches the field)
+  medium_confidence: 0.60      # >= : review recommended; below: manual verification
+  required_fields: [student_name, father_name, mother_name, hall_ticket_number, year_of_pass,
+                    total_marks, result]
+  # blank -> "please check" (not blocking): e.g. board name in an unreadable gothic header
+  recommended_fields: [board, state]

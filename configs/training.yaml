@@ -1,0 +1,26 @@
+# Fine-tuning configuration (recorded verbatim in every run.json).
+seed: 42
+epochs: 25
+batch_size: 4
+gradient_accumulation_steps: 2         # effective batch 8
+learning_rate: 3.0e-5
+weight_decay: 0.01
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+# 'O' dominates (~85% of labeled words); down-weight it moderately.
+o_class_weight: 0.3
+early_stopping_patience: 5             # epochs without validation improvement
+selection_metric: validation_entity_f1 # word-level micro F1 over entity labels (validation split only)
+num_threads: 6                         # CPU threads for torch
+include_notes_pages: true              # reverse-side 'NOTE' pages as all-O negatives
+
+# Layout-only augmentation (does not alter text or marks): jitter each word box
+# by up to this fraction of the page size, and scale the page by +-scale.
+augmentation:
+  bbox_jitter: 0.004
+  page_scale: 0.03
+  probability: 0.5
+  # Image-level augmentation (brightness, contrast, rotation, blur, noise, JPEG,
+  # resolution) is done OFFLINE by scripts/augment_pages.py: augmented page
+  # images are re-OCRed and re-aligned, so the model sees realistic OCR noise.
+  offline_augmented_copies: 0          # set > 0 after running augment_pages.py

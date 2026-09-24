@@ -1,0 +1,15 @@
+# Runtime dependencies for the web app (torch CPU is installed separately in the Dockerfile)
+pymupdf==1.28.2
+numpy==2.5.3
+pillow==12.3.0
+pydantic==2.13.5
+PyYAML==6.0.3
+RapidFuzz==3.14.6
+rapidocr==3.9.2
+onnxruntime==1.30.0
+transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+fastapi==0.141.1
+uvicorn==0.53.0
+python-multipart

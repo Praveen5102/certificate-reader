@@ -1,0 +1,17 @@
+# Python 3.10+ (developed on 3.14, Windows, CPU only)
+# torch CPU wheels:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+pymupdf==1.28.2
+numpy==2.5.3
+pillow==12.3.0
+pydantic==2.13.5
+PyYAML==6.0.3
+RapidFuzz==3.14.6
+ImageHash==4.3.2
+rapidocr==3.9.2
+onnxruntime==1.30.0
+torch==2.14.0
+transformers==5.17.0
+tokenizers==0.23.2
+safetensors==0.8.0
+huggingface_hub==1.32.0
+pytest==9.1.1

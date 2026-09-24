@@ -1,0 +1,12 @@
+{
+  "file": "model.fp16.safetensors",
+  "parts": [
+    "model.fp16.safetensors.part00",
+    "model.fp16.safetensors.part01",
+    "model.fp16.safetensors.part02"
+  ],
+  "bytes": 260418614,
+  "sha256": "c973a26985691e91da1ee084ebc02964815b4a34e48327c735bc2dbd65869344",
+  "source": "experiments/exp_004_lilt/model",
+  "dtype": "float16 on disk, loaded as float32"
+}

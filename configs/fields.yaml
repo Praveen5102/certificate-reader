@@ -1,0 +1,65 @@
+# Field definitions shared by annotation alignment, the rule baseline and
+# post-processing. Anchors are the *printed label phrases* that introduce a value
+# on TS/AP Intermediate certificates (observed on train/validation documents).
+# They are relative cues, never coordinates.
+
+entity_labels:
+  STUDENT_NAME:  {truth_field: student_name,       kind: name}
+  FATHER_NAME:   {truth_field: father_name,        kind: name}
+  MOTHER_NAME:   {truth_field: mother_name,        kind: name}
+  HALL_TICKET:   {truth_field: hall_ticket_number, kind: id}
+  EXAM_SESSION:  {truth_field: [month_of_pass, year_of_pass], kind: session}
+  RESULT:        {truth_field: result,             kind: categorical}
+  MEDIUM:        {truth_field: medium,             kind: categorical}
+  TOTAL_MARKS:   {truth_field: total_marks,        kind: int}
+  # total printed in words ("*SEVEN**FIVE***TWO*"); on AP grade memos the digit
+  # box uses a decorative font OCR cannot read, so this is the reliable reading.
+  TOTAL_IN_WORDS: {truth_field: total_marks,       kind: number_words}
+  CGPA:          {truth_field: cgpa,               kind: float}
+  # table cell roles; subject -> paper -> marks structure is rebuilt geometrically
+  SUBJECT:       {truth_field: subjects.subject_name,  kind: table}
+  MAX_MARKS:     {truth_field: subjects.maximum_marks, kind: table}
+  MARKS:         {truth_field: subjects.marks,         kind: table}
+
+anchors:
+  STUDENT_NAME:  ["This is to certify that", "certify that", "NAME", "Name of the Candidate"]
+  FATHER_NAME:   ["Father's Name", "Father Name", "FATHER'S NAME"]
+  MOTHER_NAME:   ["Mother's Name", "Mother Name", "MOTHER'S NAME"]
+  HALL_TICKET:   ["Registered No", "REGD NUMBER", "Regd. No", "Hall Ticket No", "bearing Registered No"]
+  EXAM_SESSION:  ["Examination held in", "held in", "MONTH & YEAR", "Held in", "in"]
+  RESULT:        ["and passed in", "and passed", "passed in", "RESULT", "and passed with"]
+  MEDIUM:        ["as the medium of instruction", "Medium of Instruction", "MEDIUM", "with"]
+  TOTAL_MARKS:   ["Total Marks", "In Figures", "GRAND TOTAL", "TOTAL MARKS"]
+  TOTAL_IN_WORDS: ["In Words", "GRAND TOTAL :(in words)", "(in words)", "TOTAL MARKS"]
+  CGPA:          ["CGPA", "passed with CGPA"]
+
+# Printed template text: words inside these phrases are never field values
+# (e.g. "passed" in "and passed with CGPA" is not the RESULT value).
+template_phrases:
+  - "This is to certify that"
+  - "has appeared for the Intermediate Public Examination held"
+  - "has appeared at the Intermediate Public"
+  - "Examination held in"
+  - "and passed in"
+  - "and passed with"
+  - "and passed the Intermediate Public Examination held in"
+  - "as the medium of instruction"
+  - "was examined and the marks awarded are as follows"
+  - "The subjects in which"
+  - "Father's Name"
+  - "Mother's Name"
+  - "Registered No"
+  - "Total Marks"
+  - "In Figures"
+  - "In Words"
+  - "Maximum Marks"
+  - "Marks Secured"
+  - "Optional Subjects"
+
+table:
+  header_phrases: ["Subject", "SUBJECT", "Maximum Marks", "Marks Secured", "Max Marks"]
+  end_phrases: ["Total Marks", "GRAND TOTAL", "TOTAL MARKS", "In Words", "CGPA"]
+  year_headers:
+    I:  ["I Year", "Ist YEAR", "1st YEAR", "FIRST YEAR", "IYear"]
+    II: ["II Year", "2nd YEAR", "IInd YEAR", "SECOND YEAR", "IIYear"]
+  practical_markers: ["PRACTICAL", "PRACTICALS"]

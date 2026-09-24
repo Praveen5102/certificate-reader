@@ -1,0 +1,7 @@
+# OCR configuration (recorded into every experiment).
+engine: rapidocr                 # PP-OCR (det + cls + rec) via ONNX Runtime, CPU
+try_rotations: true              # detect 90/180/270 degree page rotations
+min_horizontal_fraction: 0.5
+use_angle_cls: false            # the per-line flip classifier turned '098' into '860' (see engine.py)
+min_word_confidence: 0.0         # keep all words; low-confidence words are flagged downstream
+output_dir: data/processed/ocr   # one JSON per page: <doc>_p<N>.json
