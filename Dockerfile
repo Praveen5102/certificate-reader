@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 li
 WORKDIR /app
 COPY requirements-deploy.txt .
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install -r requirements-deploy.txt
+    && pip install -r requirements-deploy.txt \
+    # rapidocr pulls the desktop OpenCV build (needs X11/libxcb); servers need the headless one
+    && pip uninstall -y opencv-python \
+    && pip install opencv-python-headless==5.0.0.93
 
 COPY src ./src
 COPY scripts/serve.py ./scripts/serve.py
