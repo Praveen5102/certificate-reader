@@ -1,5 +1,6 @@
 # ---- PERSONAL DATA: never commit (student names, hall tickets, Aadhaar numbers) ----
 DataSet/
+Passports/
 ground_truth_*.jsonl
 data/
 annotations/
