@@ -86,6 +86,16 @@
   .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
   pre { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 14px;
         overflow: auto; font-size: 12.5px; max-height: 420px; }
+  .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+         padding: 4px; margin-bottom: 16px; gap: 4px; flex-wrap: wrap; }
+  .seg button { background: transparent; color: var(--muted); font-weight: 600; padding: 8px 16px; }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: var(--shadow);
+         outline: 1px solid var(--line); }
+  .verified { font-size: 12px; font-weight: 600; color: var(--ok); background: var(--ok-soft);
+              padding: 1px 8px; border-radius: 999px; }
+  .mrz { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; background: var(--bg);
+         border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; overflow-x: auto;
+         white-space: pre; margin: 0 0 22px; }
   .foot { margin-top: 28px; color: var(--muted); font-size: 13px; text-align: center; }
 </style>
 </head>
@@ -93,20 +103,24 @@
 <div class="wrap">
   <header>
     <h1>Certificate Reader</h1>
-    <p>Upload a Telangana / Andhra Pradesh Intermediate certificate (PDF or photo). The details appear below.</p>
+    <p>Choose the document type, upload a PDF or photo, and the details appear below.</p>
   </header>
 
   <div class="card">
+    <div class="seg" role="group" aria-label="Document type">
+      <button type="button" data-type="certificate" aria-pressed="true">12th / Intermediate certificate</button>
+      <button type="button" data-type="passport" aria-pressed="false">Passport</button>
+    </div>
     <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a file">
-      <strong>Drop a certificate here, or click to choose</strong>
-      <span>PDF, JPG or PNG · up to 25 MB</span>
+      <strong id="dropTitle">Drop a certificate here, or click to choose</strong>
+      <span id="dropHint">PDF, JPG or PNG · up to 25 MB</span>
     </div>
     <input type="file" id="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" hidden>
     <div class="row">
       <div class="fname" id="fname">No file chosen</div>
       <button id="go" disabled>Extract details</button>
     </div>
-    <div class="status" id="status"><div class="spin"></div><span>Reading the certificate… this usually takes 10–30 seconds.</span></div>
+    <div class="status" id="status"><div class="spin"></div><span id="statusText">Reading the document… this usually takes 10–30 seconds.</span></div>
     <div class="error" id="error"></div>
   </div>
 
@@ -150,43 +164,87 @@
     <pre id="json" hidden></pre>
   </section>
 
+  <section id="passportResult" class="card" aria-live="polite" style="display:none;margin-top:24px">
+    <div class="banner">
+      <div>
+        <h2 id="pTitle">Passport</h2>
+        <div class="sub" id="pSub"></div>
+      </div>
+      <span class="chip" id="pChip"></span>
+    </div>
+    <div class="grid">
+      <div class="preview" id="pPreviewBox"><img id="pPreview" alt="Uploaded passport"></div>
+      <div>
+        <h3>Personal details</h3>
+        <dl id="pPerson"></dl>
+        <h3>Passport details</h3>
+        <dl id="pPass"></dl>
+        <h3>Family and address (last page)</h3>
+        <dl id="pFamily"></dl>
+      </div>
+    </div>
+    <h3>Machine-readable zone</h3>
+    <div class="mrz" id="pMrz"></div>
+    <ul class="warnings" id="pWarnings"></ul>
+    <div class="actions">
+      <button class="ghost" id="pDownload">Download JSON</button>
+    </div>
+  </section>
+
   <div class="foot">Runs locally on this computer · values that need a human check are marked <span class="flag">check</span></div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-let chosen = null, last = null;
+let chosen = [], last = null, docType = "certificate";
 
 const drop = $("drop"), input = $("file");
 drop.onclick = () => input.click();
 drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") input.click(); };
-input.onchange = () => pick(input.files[0]);
+input.onchange = () => pick(input.files);
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  docType = b.dataset.type;
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  const pass = docType === "passport";
+  $("dropTitle").textContent = pass ? "Drop the passport photo page (and last page), or click to choose"
+                                    : "Drop a certificate here, or click to choose";
+  $("dropHint").textContent = pass ? "Up to 4 files: photo page + last page · PDF, JPG or PNG"
+                                   : "PDF, JPG or PNG · up to 25 MB";
+  input.multiple = pass;
+  input.value = "";
+  chosen = []; $("fname").textContent = "No file chosen"; $("go").disabled = true;
+  $("result").style.display = "none"; $("passportResult").style.display = "none";
+});
 ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", e => pick(e.dataTransfer.files[0]));
+drop.addEventListener("drop", e => pick(e.dataTransfer.files));
 
-function pick(f) {
-  if (!f) return;
-  chosen = f;
-  $("fname").textContent = f.name + " · " + (f.size / 1024 / 1024).toFixed(1) + " MB";
+function pick(list) {
+  const files = Array.from(list || []).slice(0, docType === "passport" ? 4 : 1);
+  if (!files.length) return;
+  chosen = files;
+  $("fname").textContent = files.map(f => f.name).join(", ") + " · " +
+      (files.reduce((a, f) => a + f.size, 0) / 1024 / 1024).toFixed(1) + " MB";
   $("go").disabled = false;
   $("error").style.display = "none";
 }
 
 $("go").onclick = async () => {
-  if (!chosen) return;
+  if (!chosen.length) return;
   $("go").disabled = true;
+  $("passportResult").style.display = "none";
   $("status").style.display = "flex";
   $("error").style.display = "none";
   $("result").style.display = "none";
   const fd = new FormData();
-  fd.append("file", chosen);
+  chosen.forEach(f => fd.append("files", f));
+  fd.append("doc_type", docType);
   try {
     const r = await fetch("/api/extract", { method: "POST", body: fd });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || "Something went wrong.");
     last = data;
-    render(data);
+    if (data.kind === "passport") renderPassport(data); else render(data);
   } catch (err) {
     $("error").textContent = err.message;
     $("error").style.display = "block";
@@ -299,6 +357,47 @@ function render(data) {
   $("result").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function renderPassport(data) {
+  const r = data.full, F = r.fields, reasons = r.review?.reasons || {};
+  $("passportResult").style.display = "block";
+  $("pTitle").textContent = r.mrz_found ? "Passport" : "Could not read a passport";
+  $("pSub").textContent = [data.file, data.seconds + " s"].filter(Boolean).join(" · ");
+  const st = r.review?.status, n = (r.review?.fields_requiring_review || []).length;
+  const chip = $("pChip");
+  chip.className = "chip " + (st === "auto" ? "ok" : st === "review_recommended" ? "warn" : "bad");
+  chip.textContent = st === "auto" ? "✓ All details look consistent" :
+      st === "review_recommended" ? `Please check ${n} item${n === 1 ? "" : "s"}` : `Manual check needed (${n})`;
+  if (data.preview) { $("pPreview").src = data.preview; $("pPreviewBox").style.display = ""; }
+  else $("pPreviewBox").style.display = "none";
+  const fmtDate = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ""); return m ? `${m[3]}/${m[2]}/${m[1]}` : v; };
+  const fill = (dl, rows) => {
+    dl.innerHTML = "";
+    for (const [label, key] of rows) {
+      const f = F[key] || {}; let v = f.value;
+      if (key.startsWith("date_")) v = fmtDate(v);
+      if (key === "sex") v = { M: "Male", F: "Female", X: "Other" }[v] || v;
+      dl.append(el("dt", label));
+      const dd = el("dd", blank(v) ? "Not found" : String(v), blank(v) ? "empty" : "");
+      if (f.verified) { const b = el("span", "✓ verified", "verified"); b.title = "Confirmed by the passport's check digits"; dd.append(b); }
+      if (key in reasons) { const x = el("span", "check", "flag" + (f.source === "mrz" && !f.verified ? " bad" : "")); x.title = reasons[key]; dd.append(x); }
+      dl.append(dd);
+    }
+  };
+  fill($("pPerson"), [["Surname", "surname"], ["Given name(s)", "given_names"], ["Sex", "sex"],
+                      ["Date of birth", "date_of_birth"], ["Place of birth", "place_of_birth"], ["Nationality", "nationality"]]);
+  fill($("pPass"), [["Passport no.", "passport_number"], ["Date of issue", "date_of_issue"],
+                    ["Date of expiry", "date_of_expiry"], ["Place of issue", "place_of_issue"], ["File no.", "file_number"]]);
+  fill($("pFamily"), [["Father / guardian", "father_name"], ["Mother", "mother_name"], ["Spouse", "spouse_name"], ["Address", "address"]]);
+  $("pMrz").textContent = r.mrz_lines?.length ? r.mrz_lines.join("\n") + "\n\n" +
+      (r.mrz_valid ? "✓ All check digits pass" : "✗ Some check digits fail — verify the flagged fields") :
+      "Not found — make sure the two code lines at the bottom of the photo page are visible.";
+  const w = $("pWarnings"); w.innerHTML = "";
+  for (const [k, reason] of Object.entries(reasons)) w.append(el("li", `${k.replaceAll("_", " ")}: ${reason}`));
+  if (r.notes) w.append(el("li", r.notes, "error"));
+  $("passportResult").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("pDownload").onclick = () => $("download").onclick();
+
 $("toggleJson").onclick = () => {
   const p = $("json"); p.hidden = !p.hidden;
   $("toggleJson").textContent = p.hidden ? "Show raw JSON" : "Hide raw JSON";
@@ -308,7 +407,7 @@ $("download").onclick = () => {
   const blob = new Blob([JSON.stringify(last.flat, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = (last.flat.file || "certificate").replace(/\.[^.]+$/, "") + ".json";
+  a.download = (last.kind === "passport" ? "passport" : (last.flat.file || "certificate").replace(/\.[^.]+$/, "")) + ".json";
   a.click();
   URL.revokeObjectURL(a.href);
 };
