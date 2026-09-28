@@ -89,10 +89,25 @@ class OCREngine:
 
     @staticmethod
     def _horizontal_fraction(lines: list[dict]) -> float:
-        if not lines:
-            return 0.0
-        horiz = sum(1 for l in lines if (l["bbox"][2] - l["bbox"][0]) >= (l["bbox"][3] - l["bbox"][1]))
-        return horiz / len(lines)
+        """Share of text (weighted by characters, lines of >= 4 chars) in boxes that
+        are wider than tall. Short tokens ('3', 'M') are square-ish and would
+        otherwise hide a page scanned sideways."""
+        long = [l for l in lines if len(l["text"].strip()) >= 4]
+        if not long:
+            return 1.0 if lines else 0.0
+        tot = sum(len(l["text"]) for l in long)
+        horiz = sum(len(l["text"]) for l in long if (l["bbox"][2] - l["bbox"][0]) >= (l["bbox"][3] - l["bbox"][1]))
+        return horiz / tot
+
+    def read_lines_low_threshold(self, img: Image.Image, text_score: float = 0.2) -> list[str]:
+        """Second pass for hard lines (e.g. a passport MRZ full of '<' fillers, which
+        the default 0.5 score cut-off drops). Returns raw line texts only."""
+        if not hasattr(self, "_engine_low"):
+            from rapidocr import RapidOCR
+            self._engine_low = RapidOCR(params={"Global.log_level": "warning", "Global.use_cls": False,
+                                                "Global.text_score": text_score})
+        res = self._engine_low(np.asarray(img.convert("RGB"))[:, :, ::-1])
+        return [str(t) for t in (res.txts or [])]
 
     def ocr_page(self, img: Image.Image, page: int = 1) -> dict[str, Any]:
         rotation = 0

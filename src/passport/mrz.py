@@ -41,21 +41,37 @@ def _clean(line: str) -> str:
     return s
 
 
+def _line1_score(l: str) -> int:
+    """How much a cleaned line looks like MRZ line 1 ('P<IND' + names + fillers)."""
+    if not l.startswith("P") or "<<" not in l:
+        return -1
+    return l.count("<") + (10 if l.startswith("P<") else 0) + (5 if l[2:5].translate(TO_ALPHA).isalpha() else 0)
+
+
+def _line2_score(l: str) -> int:
+    """MRZ line 2: passport number, dates with check digits. Scored by how many
+    of its check digits pass - the strongest evidence available."""
+    l = l.ljust(44, "<")[:44]
+    if not re.search(r"\d{6}", l.translate(TO_DIGIT)):
+        return -1
+    ok = 0
+    ok += check_digit(l[0:9]) == l[9].translate(TO_DIGIT) or \
+        check_digit(l[0] + l[1:9].translate(TO_DIGIT)) == l[9].translate(TO_DIGIT)
+    ok += check_digit(l[13:19].translate(TO_DIGIT)) == l[19].translate(TO_DIGIT)
+    ok += check_digit(l[21:27].translate(TO_DIGIT)) == l[27].translate(TO_DIGIT)
+    return ok * 10 + l.count("<")
+
+
 def find_mrz_lines(lines: list[str]) -> tuple[str, str] | None:
-    """Pick the two consecutive text lines that look like a TD3 MRZ."""
+    """Pick the (line 1, line 2) pair that best looks like a TD3 MRZ. Lines may
+    arrive in any order (rotated scans list line 2 first)."""
     cands = [_clean(l) for l in lines if len(l.replace(" ", "")) >= 30]
-    best = None
-    for i, l1 in enumerate(cands):
-        if not l1.startswith("P"):
-            continue
-        for l2 in cands[i + 1:i + 3]:
-            if l2.count("<") >= 1 and re.search(r"\d{6}", l2.translate(TO_DIGIT)):
-                score = l1.count("<") + (5 if l1[:5].startswith("P<") else 0)
-                if best is None or score > best[0]:
-                    best = (score, l1, l2)
-    if best is None:
+    ones = [(s, l) for l in cands if (s := _line1_score(l)) >= 0]
+    twos = [(s, l) for l in cands if not l.startswith("P<") and (s := _line2_score(l)) >= 0]
+    if not ones or not twos:
         return None
-    l1, l2 = best[1], best[2]
+    l1 = max(ones)[1]
+    l2 = max(twos)[1]
     return l1.ljust(44, "<")[:44], l2.ljust(44, "<")[:44]
 
 
@@ -70,7 +86,8 @@ class MRZResult:
     date_of_birth: str = ""        # ISO yyyy-mm-dd
     sex: str = ""
     date_of_expiry: str = ""
-    personal_number: str = ""
+    personal_number: str = ""                     # Indian passports: the file number digits
+    checks_optional: bool = False
     checks: dict = field(default_factory=dict)   # field -> True/False
     repairs: list = field(default_factory=list)
     raw: tuple = ("", "")
@@ -120,11 +137,14 @@ def parse_td3(l1: str, l2: str) -> MRZResult:
     pn_raw = l2[0:9]
     pn_ok = check_digit(pn_raw) == l2[9].translate(TO_DIGIT)
     if not pn_ok:
-        # Indian passports: 1 letter + 7 digits (+ filler). Repair digit positions only.
-        fixed = pn_raw[0] + pn_raw[1:].translate(TO_DIGIT)
-        if check_digit(fixed) == l2[9].translate(TO_DIGIT):
-            r.repairs.append(f"passport_number: '{pn_raw}' -> '{fixed}' (check digit passes)")
-            pn_raw, pn_ok = fixed, True
+        # Indian passports: 1 letter + 7 digits (older) or 2 letters + 6 digits (2025+).
+        # Repair digit positions only, and only if the check digit then passes.
+        for n_letters in (1, 2):
+            fixed = pn_raw[:n_letters].translate(TO_ALPHA) + pn_raw[n_letters:].translate(TO_DIGIT)
+            if check_digit(fixed) == l2[9].translate(TO_DIGIT):
+                r.repairs.append(f"passport_number: '{pn_raw}' -> '{fixed}' (check digit passes)")
+                pn_raw, pn_ok = fixed, True
+                break
     r.passport_number = pn_raw.replace("<", "")
     r.checks["passport_number"] = pn_ok
 
@@ -136,6 +156,7 @@ def parse_td3(l1: str, l2: str) -> MRZResult:
     exp, ok = _digits_field(l2[21:27], l2[27], "date_of_expiry", r.repairs)
     r.date_of_expiry, r.checks["date_of_expiry"] = _date(exp, future=True), ok
     r.personal_number = l2[28:42].replace("<", "")
+    r.checks_optional = check_digit(l2[28:42]) == l2[42].translate(TO_DIGIT) or l2[42] == "<"
     composite = l2[0:10] + l2[13:20] + l2[21:43]
     # recompute the composite with repaired values
     comp = (pn_raw.ljust(9, "<") + l2[9].translate(TO_DIGIT) + dob + l2[19].translate(TO_DIGIT)

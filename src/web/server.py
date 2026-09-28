@@ -15,7 +15,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from ..inference.pipeline import SUPPORTED_SUFFIXES, CertificateExtractor
-from ..passport.extract import extract_passport, flat as passport_flat
+from ..passport.extract import extract_passport_images, flat as passport_flat
 from ..preprocessing.render import load_input_pages
 
 STATIC = Path(__file__).parent / "static"
@@ -86,12 +86,10 @@ async def extract(files: list[UploadFile] = File(...), doc_type: str = Form("cer
                 result = extractor().extract_file(paths[0])
             else:
                 ex = extractor()
-                ocr_pages = []
-                for path in paths:
-                    for img in load_input_pages(path, ex.cfg["rendering"]["max_long_side_px"],
-                                                ex.cfg["rendering"]["min_long_side_px"]):
-                        ocr_pages.append(ex.ocr.ocr_page(img, page=len(ocr_pages) + 1))
-                result = extract_passport(ocr_pages)
+                images = [img for path in paths
+                          for img in load_input_pages(path, ex.cfg["rendering"]["max_long_side_px"],
+                                                      ex.cfg["rendering"]["min_long_side_px"])]
+                result = extract_passport_images(images[:8], ex.ocr)
         preview = _preview(paths[0])
     if doc_type == "certificate":
         full = result.model_dump()
