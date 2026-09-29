@@ -29,6 +29,8 @@ def main() -> None:
     # optimisation), so do it now instead of on the first user's upload
     from PIL import Image
     ex.ocr.ocr_page(Image.new("RGB", (800, 600), "white"))
+    from src.web import bench      # TEMPORARY speed measurement on the host (see /health)
+    bench.start(ex)
     print(f"Open http://{args.host}:{args.port} in your browser", flush=True)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
