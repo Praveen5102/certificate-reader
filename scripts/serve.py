@@ -24,7 +24,11 @@ def main() -> None:
     import uvicorn
     from src.web.server import app, extractor
     print("Loading OCR + model (first start takes ~20 s)...", flush=True)
-    extractor()
+    ex = extractor()
+    # load the OCR engine too and run it once: the first ONNX run is slow (graph
+    # optimisation), so do it now instead of on the first user's upload
+    from PIL import Image
+    ex.ocr.ocr_page(Image.new("RGB", (800, 600), "white"))
     print(f"Open http://{args.host}:{args.port} in your browser", flush=True)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 

@@ -5,7 +5,7 @@ FROM python:3.12-slim
 # mid-way ("Connection broken: Broken pipe"); retry instead of failing the build
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
     PIP_RETRIES=10 PIP_DEFAULT_TIMEOUT=120 PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 OMP_NUM_THREADS=2
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 
 # runtime libraries for onnxruntime / opencv / torch
 RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 libgomp1 \

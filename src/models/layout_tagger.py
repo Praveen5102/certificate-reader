@@ -29,6 +29,9 @@ def _join_parts(model_dir: Path) -> None:
 def load_model(model_dir: str | Path):
     import torch
     from transformers import AutoModelForTokenClassification, AutoTokenizer
+
+    from ..common.cpu import available_cpus
+    torch.set_num_threads(available_cpus())
     model_dir = Path(model_dir)
     if not (model_dir / "model.safetensors").exists() and (model_dir / "parts.json").exists():
         _join_parts(model_dir)

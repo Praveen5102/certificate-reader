@@ -54,7 +54,11 @@ class OCREngine:
         from rapidocr import RapidOCR  # imported lazily: heavy
 
         logging.getLogger("RapidOCR").setLevel(logging.WARNING)
-        params = {"Global.log_level": "warning", "Global.use_cls": self.cfg.use_angle_cls}
+        from ..common.cpu import available_cpus
+        # thread count = the container's CPU share (not the host's core count)
+        self._threads = available_cpus()
+        params = {"Global.log_level": "warning", "Global.use_cls": self.cfg.use_angle_cls,
+                  "EngineConfig.onnxruntime.intra_op_num_threads": self._threads}
         self._engine = RapidOCR(params=params)
         self.engine_info = {"name": "rapidocr", "version": self._version(),
                             "models": "PP-OCR det/rec (rapidocr defaults)",
@@ -105,7 +109,8 @@ class OCREngine:
         if not hasattr(self, "_engine_low"):
             from rapidocr import RapidOCR
             self._engine_low = RapidOCR(params={"Global.log_level": "warning", "Global.use_cls": False,
-                                                "Global.text_score": text_score})
+                                                "Global.text_score": text_score,
+                                                "EngineConfig.onnxruntime.intra_op_num_threads": self._threads})
         res = self._engine_low(np.asarray(img.convert("RGB"))[:, :, ::-1])
         return [str(t) for t in (res.txts or [])]
 

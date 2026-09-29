@@ -47,7 +47,8 @@ def _preview(path: Path) -> str | None:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "model_loaded": _extractor is not None}
+    from ..common.cpu import cpu_info
+    return {"status": "ok", "model_loaded": _extractor is not None, "cpu": cpu_info()}
 
 
 @app.get("/")

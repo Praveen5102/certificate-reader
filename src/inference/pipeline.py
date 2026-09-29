@@ -72,9 +72,14 @@ class CertificateExtractor:
             return _invalid(path.name, f"could not open document: {e}")
         if not images:
             return _invalid(path.name, "document has no pages")
+        t1 = time.time()
         ocr_pages = [self.ocr.ocr_page(img, page=i + 1) for i, img in enumerate(images)]
+        t2 = time.time()
         res = self.extract_from_ocr(path.name, ocr_pages)
-        res.provenance["elapsed_s"] = round(time.time() - t0, 2)
+        t3 = time.time()
+        res.provenance["elapsed_s"] = round(t3 - t0, 2)
+        res.provenance["timings_s"] = {"render": round(t1 - t0, 2), "ocr": round(t2 - t1, 2),
+                                       "tagging_and_checks": round(t3 - t2, 2)}
         return res
 
     def extract_from_ocr(self, file: str, ocr_pages: list[dict]) -> ExtractionResult:
