@@ -11,9 +11,12 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from ..idcards.aadhaar import extract_aadhaar_images
+from ..idcards.common import flat as id_flat
+from ..idcards.pan import extract_pan_images
 from ..inference.pipeline import SUPPORTED_SUFFIXES, CertificateExtractor
 from ..passport.extract import extract_passport_images, flat as passport_flat
 from ..preprocessing.render import load_input_pages
@@ -26,11 +29,52 @@ _extractor: CertificateExtractor | None = None
 _lock = threading.Lock()          # one extraction at a time (model + OCR are CPU-heavy)
 
 
+_ocr = None
+model_error: str | None = None     # set when the certificate model cannot load (e.g. torch blocked)
+
+
 def extractor() -> CertificateExtractor:
     global _extractor
     if _extractor is None:
         _extractor = CertificateExtractor()
     return _extractor
+
+
+def ocr_engine():
+    """OCR only (passport / Aadhaar / PAN need no trained model)."""
+    global _ocr
+    if _extractor is not None:
+        return _extractor.ocr
+    if _ocr is None:
+        from ..common.io import load_yaml
+        from ..ocr.engine import OCRConfig, OCREngine
+        cfg = load_yaml("configs/ocr.yaml")
+        keys = ("engine", "try_rotations", "min_horizontal_fraction", "min_word_confidence", "use_angle_cls")
+        _ocr = OCREngine(OCRConfig(**{k: cfg[k] for k in keys}))
+    return _ocr
+
+
+AUDIT_LOG = Path("logs/aadhaar_audit.jsonl")
+
+
+def _audit(event: str, request: Request, result: dict) -> None:
+    """One line per full-number view: when, from where, the operator's consent, and
+    the last 4 digits only - the log itself never holds a full Aadhaar number."""
+    import datetime as dt
+    import json
+    number = result["fields"]["aadhaar_number"]["value"] or ""
+    entry = {"time": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "event": event,
+             "client": request.client.host if request.client else None, "consent_confirmed": True,
+             "number_last4": number.replace(" ", "")[-4:] or None,
+             "check_digit_ok": result["checks"].get("number_check_digit")}
+    AUDIT_LOG.parent.mkdir(exist_ok=True)
+    with AUDIT_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def _render_cfg() -> dict:
+    from ..common.io import load_yaml
+    return load_yaml("configs/inference.yaml")["rendering"]
 
 
 def _preview(path: Path) -> str | None:
@@ -49,7 +93,8 @@ def _preview(path: Path) -> str | None:
 def health() -> dict:
     from ..common.cpu import cpu_info
     from .bench import RESULTS
-    return {"status": "ok", "model_loaded": _extractor is not None, "cpu": cpu_info(), "bench": RESULTS}
+    return {"status": "ok", "model_loaded": _extractor is not None, "model_error": model_error,
+            "cpu": cpu_info(), "bench": RESULTS}
 
 
 @app.get("/")
@@ -58,10 +103,11 @@ def index() -> FileResponse:
 
 
 @app.post("/api/extract")
-async def extract(files: list[UploadFile] = File(...), doc_type: str = Form("certificate")) -> JSONResponse:
-    """doc_type: 'certificate' (12th / Intermediate) or 'passport'.
-    Passports may be uploaded as up to 4 files (photo page + last page)."""
-    if doc_type not in ("certificate", "passport"):
+async def extract(request: Request, files: list[UploadFile] = File(...), doc_type: str = Form("certificate"),
+                  consent: str = Form("")) -> JSONResponse:
+    """doc_type: 'certificate' (12th / Intermediate), 'passport', 'aadhaar' or 'pan'.
+    ID documents may be uploaded as up to 4 files (e.g. card front + back)."""
+    if doc_type not in ("certificate", "passport", "aadhaar", "pan"):
         raise HTTPException(400, "Unknown document type.")
     if not files:
         raise HTTPException(400, "No file uploaded.")
@@ -85,13 +131,27 @@ async def extract(files: list[UploadFile] = File(...), doc_type: str = Form("cer
         t0 = time.time()
         with _lock:
             if doc_type == "certificate":
-                result = extractor().extract_file(paths[0])
+                try:
+                    ex = extractor()
+                except Exception as e:  # e.g. torch DLL blocked on this PC
+                    raise HTTPException(503, f"The certificate model could not be loaded here ({e}). "
+                                             "Passport, Aadhaar and PAN still work.")
+                result = ex.extract_file(paths[0])
             else:
-                ex = extractor()
+                rc = _render_cfg()
                 images = [img for path in paths
-                          for img in load_input_pages(path, ex.cfg["rendering"]["max_long_side_px"],
-                                                      ex.cfg["rendering"]["min_long_side_px"])]
-                result = extract_passport_images(images[:8], ex.ocr)
+                          for img in load_input_pages(path, rc["max_long_side_px"], rc["min_long_side_px"])][:8]
+                ocr = ocr_engine()
+                if doc_type == "passport":
+                    result = extract_passport_images(images, ocr)
+                elif doc_type == "aadhaar":
+                    # full number only with the card holder's consent; otherwise masked
+                    show_full = consent == "yes"
+                    result = extract_aadhaar_images(images, ocr, show_full_number=show_full)
+                    if show_full:
+                        _audit("aadhaar_full_number_shown", request, result)
+                else:
+                    result = extract_pan_images(images, ocr)
         preview = _preview(paths[0])
     if doc_type == "certificate":
         full = result.model_dump()
@@ -100,6 +160,6 @@ async def extract(files: list[UploadFile] = File(...), doc_type: str = Form("cer
         flat["file"] = names
         return JSONResponse({"kind": "certificate", "flat": flat, "full": full, "preview": preview,
                              "seconds": round(time.time() - t0, 1), "file": names})
-    flat = passport_flat(result) | {"file": names}
-    return JSONResponse({"kind": "passport", "flat": flat, "full": result, "preview": preview,
+    flat = (passport_flat(result) if doc_type == "passport" else id_flat(result)) | {"file": names}
+    return JSONResponse({"kind": doc_type, "flat": flat, "full": result, "preview": preview,
                          "seconds": round(time.time() - t0, 1), "file": names})

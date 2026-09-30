@@ -22,15 +22,22 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
     args = ap.parse_args()
     import uvicorn
-    from src.web.server import app, extractor
+    from src.web import server
     print("Loading OCR + model (first start takes ~20 s)...", flush=True)
-    ex = extractor()
+    try:
+        ex = server.extractor()
+    except Exception as e:      # still serve passport / Aadhaar / PAN, which need OCR only
+        server.model_error = str(e)
+        ex = None
+        print(f"WARNING: certificate model not loaded ({e}); other document types still work", flush=True)
     # load the OCR engine too and run it once: the first ONNX run is slow (graph
     # optimisation), so do it now instead of on the first user's upload
     from PIL import Image
-    ex.ocr.ocr_page(Image.new("RGB", (800, 600), "white"))
-    from src.web import bench      # TEMPORARY speed measurement on the host (see /health)
-    bench.start(ex)
+    server.ocr_engine().ocr_page(Image.new("RGB", (800, 600), "white"))
+    if ex is not None and os.environ.get("PORT"):     # hosted only, not on a local PC
+        from src.web import bench      # TEMPORARY speed measurement on the host (see /health)
+        bench.start(ex)
+    app = server.app
     print(f"Open http://{args.host}:{args.port} in your browser", flush=True)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 

@@ -22,3 +22,6 @@ deploy/model/model.safetensors
 deploy/model/model.safetensors.tmp
 .git/
 Dockerfile
+Aadhaar/
+PAN/
+logs/

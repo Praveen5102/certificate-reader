@@ -20,3 +20,6 @@ __pycache__/
 # ---- model: only the split fp16 parts are committed; the joined file is rebuilt at startup ----
 deploy/model/model.safetensors
 deploy/model/model.safetensors.tmp
+Aadhaar/
+PAN/
+logs/
