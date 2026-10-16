@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from ..idcards.aadhaar import extract_aadhaar_images
 from ..idcards.common import flat as id_flat
 from ..idcards.pan import extract_pan_images
+from ..idcards.ssc import extract_ssc_images, flat as ssc_flat
 from ..inference.pipeline import SUPPORTED_SUFFIXES, CertificateExtractor
 from ..passport.extract import extract_passport_images, flat as passport_flat
 from ..preprocessing.render import load_input_pages
@@ -105,9 +106,9 @@ def index() -> FileResponse:
 @app.post("/api/extract")
 async def extract(request: Request, files: list[UploadFile] = File(...), doc_type: str = Form("certificate"),
                   consent: str = Form("")) -> JSONResponse:
-    """doc_type: 'certificate' (12th / Intermediate), 'passport', 'aadhaar' or 'pan'.
+    """doc_type: 'certificate' (12th / Intermediate), 'ssc' (10th), 'passport', 'aadhaar' or 'pan'.
     ID documents may be uploaded as up to 4 files (e.g. card front + back)."""
-    if doc_type not in ("certificate", "passport", "aadhaar", "pan"):
+    if doc_type not in ("certificate", "ssc", "passport", "aadhaar", "pan"):
         raise HTTPException(400, "Unknown document type.")
     if not files:
         raise HTTPException(400, "No file uploaded.")
@@ -150,6 +151,8 @@ async def extract(request: Request, files: list[UploadFile] = File(...), doc_typ
                     result = extract_aadhaar_images(images, ocr, show_full_number=show_full)
                     if show_full:
                         _audit("aadhaar_full_number_shown", request, result)
+                elif doc_type == "ssc":
+                    result = extract_ssc_images(images, ocr)
                 else:
                     result = extract_pan_images(images, ocr)
         preview = _preview(paths[0])
@@ -160,6 +163,6 @@ async def extract(request: Request, files: list[UploadFile] = File(...), doc_typ
         flat["file"] = names
         return JSONResponse({"kind": "certificate", "flat": flat, "full": full, "preview": preview,
                              "seconds": round(time.time() - t0, 1), "file": names})
-    flat = (passport_flat(result) if doc_type == "passport" else id_flat(result)) | {"file": names}
+    flat = {"passport": passport_flat, "ssc": ssc_flat}.get(doc_type, id_flat)(result) | {"file": names}
     return JSONResponse({"kind": doc_type, "flat": flat, "full": result, "preview": preview,
                          "seconds": round(time.time() - t0, 1), "file": names})

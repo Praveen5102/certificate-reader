@@ -319,6 +319,7 @@
     <symbol id="i-cert" viewBox="0 0 24 24"><path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></symbol>
     <symbol id="i-passport" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M9 16h6"/></symbol>
     <symbol id="i-aadhaar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.6-1.4 1.5-2 2.5-2s1.9.6 2.5 2"/><path d="M14 10h4M14 13h3"/></symbol>
+    <symbol id="i-ssc" viewBox="0 0 24 24"><path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/></symbol>
     <symbol id="i-pan" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6M7 12h10M7 15h4"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -429,6 +430,9 @@ const human = k => k.replace(/^subjects\[(\d+)\]$/, (_, i) => `Subject row ${+i 
 
 /* ---------- document types ---------- */
 const TYPES = [
+  { id: "ssc", name: "10th / SSC", sub: "Secondary School Certificate", icon: "ssc", max: 1,
+    drop: "Drop the 10th certificate here or <u>browse</u>", hint: "One file: PDF, JPG or PNG, up to 25 MB",
+    empty: "Each grade is checked against its grade point, the CGPA against the average, and marks against the printed total." },
   { id: "certificate", name: "12th / Intermediate", sub: "Marks memo or pass certificate", icon: "cert", max: 1,
     drop: "Drop the certificate here or <u>browse</u>", hint: "One file: PDF, JPG or PNG, up to 25 MB",
     empty: "Subject marks are added up and compared with the printed total, and the total in words with the figures." },
@@ -442,7 +446,8 @@ const TYPES = [
     drop: "Drop the PAN card here or <u>browse</u>", hint: "Up to 4 files: PDF, JPG or PNG",
     empty: "The PAN format is checked, along with the holder type and the letter that matches the name." },
 ];
-let docType = TYPES[0], chosen = [], last = null, timer = null;
+const DEFAULT_TYPE = TYPES.find(t => t.id === "certificate");
+let docType = DEFAULT_TYPE, chosen = [], last = null, timer = null;
 
 const btn = $("typeBtn"), menu = $("typeMenu");
 TYPES.forEach(t => {
@@ -641,6 +646,7 @@ function frame(data, { title, meta = [], sections, labels = {}, badKeys = [], ra
 function renderResult(data) {
   if (data.kind === "passport") return renderPassport(data);
   if (data.kind === "aadhaar" || data.kind === "pan") return renderId(data);
+  if (data.kind === "ssc") return renderSsc(data);
   return renderCertificate(data);
 }
 
@@ -707,6 +713,98 @@ function renderCertificate(data) {
     title, meta, labels, badKeys: Object.keys(reasons).filter(badOf),
     sections: [figs, group("Student", student), group("Examination", exam), group("Subjects and marks", table),
                checks.length ? group("Validation", notesList(checks)) : null],
+  });
+}
+
+/* ---------- 10th / SSC ---------- */
+function renderSsc(data) {
+  const r = data.full, F = r.fields || {}, reasons = r.review?.reasons || {}, C = r.checks || {};
+  const v = k => F[k]?.value;
+  const labels = { student_name: "Student name", father_name: "Father's name", mother_name: "Mother's name",
+                   roll_number: "Roll no.", date_of_birth: "Date of birth", school: "School", medium: "Medium",
+                   exam: "Examination", cgpa: "CGPA", total_marks: "Total marks", subjects: "Subjects", document: "Document" };
+  const meta = [["file", data.file], ["clock", data.seconds + " s"], ["info", v("board")]];
+  if (r.document_type !== "ssc") {
+    return frame(data, { title: "Not a 10th certificate", meta, labels,
+                         sections: [notesList([["bad", r.notes || "Upload a TS / AP 10th (SSC) certificate."]])] });
+  }
+  const graded = v("result_type") === "grades";
+  const subs = r.subjects || [];
+
+  const figs = el("div", { class: "figures", role: "group", "aria-label": "Result summary" });
+  const fig = (k, val, ok) => figs.append(el("div", { class: "fig" }, el("div", { class: "k", text: k }),
+    el("div", { class: "n" + (blank(val) ? " dim" : ""), text: blank(val) ? "Not found" : String(val) })));
+  if (graded) {
+    fig("CGPA", blank(v("cgpa")) ? null : Number(v("cgpa")).toFixed(1));
+    fig("Grade points", blank(C.grade_point_sum) ? null : `${C.grade_point_sum} / ${subs.length * 10}`);
+  } else {
+    fig("Total marks", blank(v("total_marks")) ? null : v("total_marks") + (blank(v("maximum_marks")) ? "" : " / " + v("maximum_marks")));
+    fig("Percentage", blank(v("percentage")) ? null : v("percentage") + "%");
+  }
+  fig("Examination", v("exam"));
+  fig("Medium", v("medium"));
+
+  const list = rowsDef => {
+    const dl = el("dl", { class: "fields" });
+    rowsDef.forEach(([label, key]) => {
+      let val = v(key);
+      if (key === "date_of_birth") val = fmtDate(val);
+      row(dl, { label, value: val, reason: reasons[key], bad: key === "date_of_birth" || key === "roll_number",
+                copy: key === "roll_number", verified: F[key]?.verified,
+                verifiedTip: key === "cgpa" ? "Equals the average of the subject grade points" : "Equals the sum of the subject marks" });
+    });
+    return dl;
+  };
+  const student = list([["Student name", "student_name"], ["Father's name", "father_name"], ["Mother's name", "mother_name"],
+                        ["Date of birth", "date_of_birth"], ["Roll no.", "roll_number"]]);
+  const school = list([["School", "school"], ["Board", "board"], ["Appeared as", "appearance"],
+                       ...(graded ? [["CGPA", "cgpa"]] : [["Total marks", "total_marks"]])]);
+
+  const tbody = el("tbody");
+  subs.forEach((s, i) => {
+    const flagged = s.review && s.review !== "auto";
+    const name = s.area === "L1" || s.area === "L2" || s.area === "L3" ? `${s.area_name} (${s.subject || "?"})` : s.area_name;
+    tbody.append(el("tr", { class: flagged ? "flagged" : "", title: flagged ? (reasons[`subjects[${i}]`] || "Check this row") : null },
+      el("td", { text: name }),
+      ...(graded ? [el("td", { text: s.grade ?? "?" }), el("td", { class: "num", text: s.grade_point ?? "?" })]
+                 : [el("td", { class: "num", text: s.marks ?? "?" }), el("td", { class: "num", text: "100" })])));
+  });
+  if (!subs.length) tbody.append(el("tr", {}, el("td", { colspan: "3", text: "No subject rows could be read. Enter them manually." })));
+  const tfoot = el("tfoot");
+  if (subs.length) {
+    const td0 = el("td", {}, graded ? "Average grade point" : "Sum of subjects");
+    let okNote = null, value = "";
+    if (graded) {
+      const pts = subs.map(s => s.grade_point).filter(Number.isInteger);
+      const avg = pts.length ? pts.reduce((a, b) => a + b, 0) / pts.length : null;
+      value = avg == null ? "–" : avg.toFixed(2);
+      if ("cgpa_matches_grade_points" in C) okNote = [C.cgpa_matches_grade_points, C.cgpa_matches_grade_points ? "Matches the printed CGPA" : `Printed CGPA is ${v("cgpa")}`];
+    } else {
+      const sum = subs.reduce((a, s) => a + (Number.isInteger(s.marks) ? s.marks : 0), 0);
+      value = sum;
+      if ("total_matches_subjects" in C) okNote = [C.total_matches_subjects, C.total_matches_subjects ? "Matches the printed total" : `Printed total is ${v("total_marks")}`];
+    }
+    if (okNote) {
+      const note = el("span", { class: "sumnote" }, icon(okNote[0] ? "check" : "alert"), okNote[1]);
+      note.style.color = okNote[0] ? "var(--ok)" : "var(--warn)";
+      td0.append(note);
+    }
+    tfoot.append(el("tr", {}, td0, graded ? el("td") : el("td", { class: "num", text: value }),
+                    el("td", { class: "num", text: graded ? value : (v("maximum_marks") ?? "–") })));
+  }
+  const table = el("div", { class: "tablewrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, el("th", { text: "Subject" }),
+      ...(graded ? [el("th", { text: "Grade" }), el("th", { class: "num", text: "Grade point" })]
+                 : [el("th", { class: "num", text: "Marks" }), el("th", { class: "num", text: "Maximum" })]))),
+    tbody, tfoot));
+
+  const notes = [];
+  if (C.tilt_corrected) notes.push(["info", "The photo was slightly tilted; it was straightened before reading."]);
+  if (r.notes) notes.push(["info", r.notes]);
+  frame(data, {
+    title: "10th certificate (SSC)", meta, labels, badKeys: ["date_of_birth", "roll_number"].filter(k => k in reasons),
+    sections: [figs, group("Student", student), group("School and result", school),
+               group(graded ? "Subjects and grades" : "Subjects and marks", table), notes.length ? notesList(notes) : null],
   });
 }
 
@@ -797,13 +895,13 @@ function download() {
   const blob = new Blob([JSON.stringify(last.flat, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = (last.kind === "certificate" ? (last.flat.file || "certificate").replace(/\.[^.]+$/, "") : last.kind) + ".json";
+  a.download = (["certificate", "ssc"].includes(last.kind) ? (last.flat.file || last.kind).replace(/\.[^.]+$/, "") : last.kind) + ".json";
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-choose(TYPES[0]);
-showEmpty();
+docType = null;
+choose(DEFAULT_TYPE);
 </script>
 </body>
 </html>
