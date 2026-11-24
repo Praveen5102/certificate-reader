@@ -14,3 +14,5 @@ safetensors==0.8.0
 fastapi==0.141.1
 uvicorn==0.53.0
 python-multipart
+pypdf==6.21.3
+pypdfium2==5.14.0

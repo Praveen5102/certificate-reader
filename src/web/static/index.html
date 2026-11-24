@@ -320,6 +320,7 @@
     <symbol id="i-passport" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M9 16h6"/></symbol>
     <symbol id="i-aadhaar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.6-1.4 1.5-2 2.5-2s1.9.6 2.5 2"/><path d="M14 10h4M14 13h3"/></symbol>
     <symbol id="i-ssc" viewBox="0 0 24 24"><path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-loan" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M6 17v-6M10 17v-6M14 17v-6M18 17v-6"/><path d="m12 3 9 5H3z"/></symbol>
     <symbol id="i-pan" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6M7 12h10M7 15h4"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -445,6 +446,9 @@ const TYPES = [
   { id: "pan", name: "PAN card", sub: "Front of the card", icon: "pan", max: 4,
     drop: "Drop the PAN card here or <u>browse</u>", hint: "Up to 4 files: PDF, JPG or PNG",
     empty: "The PAN format is checked, along with the holder type and the letter that matches the name." },
+  { id: "sanction", name: "Loan sanction letter", sub: "Education loan from any lender", icon: "loan", max: 4,
+    drop: "Drop the sanction letter here or <u>browse</u>", hint: "PDF from the lender, or a scan or photo, up to 4 files",
+    empty: "The amount in figures is checked against the amount in words, and the instalment periods against the tenure." },
 ];
 const DEFAULT_TYPE = TYPES.find(t => t.id === "certificate");
 let docType = DEFAULT_TYPE, chosen = [], last = null, timer = null;
@@ -647,6 +651,7 @@ function renderResult(data) {
   if (data.kind === "passport") return renderPassport(data);
   if (data.kind === "aadhaar" || data.kind === "pan") return renderId(data);
   if (data.kind === "ssc") return renderSsc(data);
+  if (data.kind === "sanction") return renderSanction(data);
   return renderCertificate(data);
 }
 
@@ -805,6 +810,72 @@ function renderSsc(data) {
     title: "10th certificate (SSC)", meta, labels, badKeys: ["date_of_birth", "roll_number"].filter(k => k in reasons),
     sections: [figs, group("Student", student), group("School and result", school),
                group(graded ? "Subjects and grades" : "Subjects and marks", table), notes.length ? notesList(notes) : null],
+  });
+}
+
+/* ---------- education-loan sanction letter ---------- */
+const inr = n => blank(n) ? null : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+function renderSanction(data) {
+  const r = data.full, F = r.fields || {}, reasons = r.review?.reasons || {}, C = r.checks || {};
+  const v = k => F[k]?.value;
+  const labels = { lender: "Bank / lender", university: "University", country: "Country", course: "Course",
+                   loan_amount: "Loan amount", roi: "Rate of interest", processing_fee: "Processing fee",
+                   insurance: "Insurance", tenure_months: "Tenure", document: "Document" };
+  const meta = [["file", data.file], ["clock", data.seconds + " s"], ["info", C.text_source ? `Read from ${C.text_source}` : null]];
+  if (r.document_type !== "sanction_letter") {
+    return frame(data, { title: "Not a sanction letter", meta, labels,
+                         sections: [notesList([["bad", r.notes || "Upload an education-loan sanction letter."]])] });
+  }
+  const months = n => blank(n) ? null : `${n} months` + (n % 12 === 0 ? ` (${n / 12} years)` : "");
+  const pfText = () => {
+    const amt = v("processing_fee"), pct = v("processing_fee_percent");
+    if (blank(amt)) return null;
+    const main = typeof amt === "number" ? inr(amt) : String(amt);
+    return main + (blank(pct) || String(amt).endsWith("%") ? "" : ` (${pct}% of the loan)`);
+  };
+
+  const figs = el("div", { class: "figures", role: "group", "aria-label": "Loan summary" });
+  const fig = (k, val) => figs.append(el("div", { class: "fig" }, el("div", { class: "k", text: k }),
+    el("div", { class: "n" + (blank(val) ? " dim" : ""), text: blank(val) ? "Not found" : String(val) })));
+  fig("Loan amount", inr(v("loan_amount")));
+  fig("Interest", blank(v("roi")) ? null : `${v("roi")}%`);
+  fig("Tenure", blank(v("tenure_months")) ? null : `${v("tenure_months")} months`);
+  fig("Processing fee", typeof v("processing_fee") === "number" ? inr(v("processing_fee")) : v("processing_fee"));
+
+  const list = rows => {
+    const dl = el("dl", { class: "fields" });
+    rows.forEach(([label, key, val, opts]) => row(dl, { label, value: val !== undefined ? val : v(key), reason: reasons[key],
+      bad: ["loan_amount", "roi"].includes(key), ...(opts || {}) }));
+    return dl;
+  };
+  const amountText = blank(v("loan_amount")) ? null : inr(v("loan_amount")) + (v("loan_amount_foreign") ? ` (about ${v("loan_amount_foreign")})` : "");
+  const loan = list([
+    ["Bank / lender", "lender"],
+    ["University", "university"],
+    ["Country", "country"],
+    ["Course", "course"],
+    ["Loan amount", "loan_amount", amountText, { verified: F.loan_amount?.verified, verifiedTip: "Figures match the amount written in words" }],
+    ["Rate of interest", "roi", blank(v("roi")) ? null : `${v("roi")}% p.a.` + (v("roi_type") ? `, ${v("roi_type").toLowerCase()}` : "")],
+    ["Processing fee", "processing_fee", pfText()],
+    ["Insurance", "insurance", typeof v("insurance") === "number" ? inr(v("insurance")) : v("insurance")],
+    ["Tenure", "tenure_months", months(v("tenure_months")), { verified: C.instalment_periods_match_tenure, verifiedTip: "The instalment periods add up to the tenure" }],
+  ]);
+  const terms = list([
+    ["Moratorium", "moratorium_months", months(v("moratorium_months")), { empty: "Not printed" }],
+    ["EMI", "emi", inr(v("emi")), { empty: "Not printed" }],
+    ["Loan type", "loan_type"],
+    ["Sanction date", "sanction_date", fmtDate(v("sanction_date"))],
+    ["Valid until", "valid_until", fmtDate(v("valid_until")), { empty: "Not printed" }],
+    ["Application no.", "application_number", undefined, { copy: true }],
+  ]);
+  const people = list([["Applicant", "applicant_name"], ["Co-applicant(s)", "co_applicants"]]);
+  const notes = [];
+  if (v("processing_fee_note")) notes.push(["info", `Processing fee: ${v("processing_fee_note")}.`]);
+  if (r.notes) notes.push(["info", r.notes]);
+  frame(data, {
+    title: "Loan sanction letter", meta, labels, badKeys: ["loan_amount", "roi"].filter(k => k in reasons),
+    sections: [figs, group("Loan details", loan), group("Repayment and validity", terms), group("Applicants", people),
+               notes.length ? notesList(notes) : null],
   });
 }
 

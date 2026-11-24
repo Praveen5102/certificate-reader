@@ -10,9 +10,13 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import fitz  # PyMuPDF
 import numpy as np
 from PIL import Image
+
+try:
+    import fitz  # PyMuPDF
+except ImportError:  # e.g. its DLL blocked by Windows App Control: fall back to pypdfium2
+    fitz = None
 
 
 @dataclass
@@ -75,9 +79,33 @@ def render_pdf(pdf_path: Path, out_dir: Path, max_long: int, min_long: int,
     return pages
 
 
+def _load_pdf_pdfium(path: Path, max_long: int, min_long: int) -> list[Image.Image]:
+    """Same page sizing as the PyMuPDF path, rendered with pypdfium2."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+    out = []
+    pdf = pdfium.PdfDocument(str(path))
+    try:
+        for page in pdf:
+            native = 0
+            for obj in page.get_objects(filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE]):
+                try:
+                    native = max(native, *obj.get_px_size())
+                except Exception:
+                    pass
+            w, h = page.get_size()
+            target = max(min(native if native > 0 else max_long, max_long), min_long)
+            out.append(page.render(scale=target / max(w, h)).to_pil().convert("RGB"))
+    finally:
+        pdf.close()
+    return out
+
+
 def load_input_pages(path: Path, max_long: int, min_long: int) -> list[Image.Image]:
     """Inference-time loader: accept a PDF or a single image file."""
     suffix = path.suffix.lower()
+    if suffix == ".pdf" and fitz is None:
+        return _load_pdf_pdfium(path, max_long, min_long)
     if suffix == ".pdf":
         out = []
         with fitz.open(path) as doc:
