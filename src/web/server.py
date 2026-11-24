@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from ..idcards.aadhaar import extract_aadhaar_images
 from ..idcards.common import flat as id_flat
 from ..idcards.pan import extract_pan_images
+from ..idcards.bankstatement import extract_statement_files, flat as statement_flat
 from ..idcards.sanction import extract_sanction_files, flat as sanction_flat
 from ..idcards.ssc import extract_ssc_images, flat as ssc_flat
 from ..inference.pipeline import SUPPORTED_SUFFIXES, CertificateExtractor
@@ -106,11 +107,11 @@ def index() -> FileResponse:
 
 @app.post("/api/extract")
 async def extract(request: Request, files: list[UploadFile] = File(...), doc_type: str = Form("certificate"),
-                  consent: str = Form("")) -> JSONResponse:
+                  consent: str = Form(""), password: str = Form("")) -> JSONResponse:
     """doc_type: 'certificate' (12th / Intermediate), 'ssc' (10th), 'passport', 'aadhaar', 'pan'
     or 'sanction' (education-loan sanction letter).
     ID documents may be uploaded as up to 4 files (e.g. card front + back)."""
-    if doc_type not in ("certificate", "ssc", "passport", "aadhaar", "pan", "sanction"):
+    if doc_type not in ("certificate", "ssc", "passport", "aadhaar", "pan", "sanction", "bank_statement"):
         raise HTTPException(400, "Unknown document type.")
     if not files:
         raise HTTPException(400, "No file uploaded.")
@@ -140,6 +141,12 @@ async def extract(request: Request, files: list[UploadFile] = File(...), doc_typ
                     raise HTTPException(503, f"The certificate model could not be loaded here ({e}). "
                                              "Passport, Aadhaar and PAN still work.")
                 result = ex.extract_file(paths[0])
+            elif doc_type == "bank_statement":
+                # digital PDFs: the PDF's own text (password if protected); scans: OCR every page
+                rc = _render_cfg()
+                result = extract_statement_files(
+                    paths, lambda pth: load_input_pages(pth, rc["max_long_side_px"], rc["min_long_side_px"]),
+                    ocr_engine(), password=password)
             elif doc_type == "sanction":
                 # system-generated letters: read the PDF's own text; scans / photos: OCR
                 rc = _render_cfg()
@@ -171,6 +178,7 @@ async def extract(request: Request, files: list[UploadFile] = File(...), doc_typ
         flat["file"] = names
         return JSONResponse({"kind": "certificate", "flat": flat, "full": full, "preview": preview,
                              "seconds": round(time.time() - t0, 1), "file": names})
-    flat = {"passport": passport_flat, "ssc": ssc_flat, "sanction": sanction_flat}.get(doc_type, id_flat)(result) | {"file": names}
+    flat = {"passport": passport_flat, "ssc": ssc_flat, "sanction": sanction_flat,
+            "bank_statement": statement_flat}.get(doc_type, id_flat)(result) | {"file": names}
     return JSONResponse({"kind": doc_type, "flat": flat, "full": result, "preview": preview,
                          "seconds": round(time.time() - t0, 1), "file": names})

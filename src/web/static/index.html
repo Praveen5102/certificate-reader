@@ -156,6 +156,31 @@
   .consent { grid-column: 1 / -1; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px;
              border-radius: var(--r-md); background: var(--soft); border: 1px solid var(--line); cursor: pointer; }
   .consent[hidden] { display: none; }
+  .pwbox { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 14px;
+           border-radius: var(--r-md); background: var(--soft); border: 1px solid var(--line); }
+  .pwbox[hidden] { display: none; }
+  .pwbox label { font-weight: 600; font-size: 14px; }
+  .pwbox input { min-width: 220px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-strong);
+                 background: var(--surface); }
+  .pwbox small { color: var(--muted); font-size: 12.5px; flex-basis: 100%; }
+  .fig .n.pos { color: var(--ok); } .fig .n.neg { color: var(--bad); }
+  .bars { display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 14px; }
+  .bar .track { display: block; height: 10px; border-radius: 999px; background: var(--sunken); overflow: hidden; }
+  .bar .fill { display: block; height: 100%; border-radius: 999px; background: var(--blue); }
+  .bar .amt { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 92px; text-align: right; }
+  .flaglist { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .flaglist li { padding: 10px 12px; border-radius: 10px; font-size: 14px; }
+  .flaglist li.high { background: var(--bad-soft); } .flaglist li.medium { background: var(--warn-soft); }
+  .flaglist li.low { background: var(--sunken); }
+  .flaglist li b { display: inline-flex; align-items: center; gap: 6px; }
+  .flaglist li.high b { color: var(--bad); } .flaglist li.medium b { color: var(--warn); }
+  .flaglist pre { margin: 6px 0 0; font: 12px/1.5 var(--mono); white-space: pre-wrap; color: var(--muted); }
+  .txfilter { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; font-size: 14px; }
+  .txfilter select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); }
+  details.tx summary { cursor: pointer; font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+  td.cr { color: var(--ok); } td.dr { color: var(--text); }
+  tr.badrow td { background: var(--bad-soft); }
   .consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--blue); flex: none; cursor: pointer; }
   .consent b { font-weight: 600; }
   .consent small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
@@ -320,6 +345,7 @@
     <symbol id="i-passport" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M9 16h6"/></symbol>
     <symbol id="i-aadhaar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6.5 16c.6-1.4 1.5-2 2.5-2s1.9.6 2.5 2"/><path d="M14 10h4M14 13h3"/></symbol>
     <symbol id="i-ssc" viewBox="0 0 24 24"><path d="M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2z"/><path d="M22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7z"/></symbol>
+    <symbol id="i-bank" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 14h4M7 17h7"/></symbol>
     <symbol id="i-loan" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M6 17v-6M10 17v-6M14 17v-6M18 17v-6"/><path d="m12 3 9 5H3z"/></symbol>
     <symbol id="i-pan" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h6M7 12h10M7 15h4"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -397,6 +423,11 @@
       <span><b>The card holder has given consent</b> to process their Aadhaar and show the full number.
         <small>Without this, only the last 4 digits are shown. Each full-number view is recorded.</small></span>
     </label>
+    <div class="pwbox" id="pwBox" hidden>
+      <label for="pdfPassword">PDF password</label>
+      <input type="password" id="pdfPassword" autocomplete="off" placeholder="Only if the PDF asks for one">
+      <small>Bank statements are often locked, usually with the date of birth or part of the name. It is used only to open the file.</small>
+    </div>
     <div class="error" id="error" role="alert" hidden><svg class="i"><use href="#i-alert"/></svg><span id="errorText"></span></div>
   </section>
 
@@ -446,6 +477,9 @@ const TYPES = [
   { id: "pan", name: "PAN card", sub: "Front of the card", icon: "pan", max: 4,
     drop: "Drop the PAN card here or <u>browse</u>", hint: "Up to 4 files: PDF, JPG or PNG",
     empty: "The PAN format is checked, along with the holder type and the letter that matches the name." },
+  { id: "bank_statement", name: "Bank statement", sub: "6 months, any bank", icon: "bank", max: 4,
+    drop: "Drop the bank statement here or <u>browse</u>", hint: "PDF from net banking, or a scan, up to 4 files",
+    empty: "Income, monthly expenses, EMIs and red flags are worked out, and every row is checked against the running balance." },
   { id: "sanction", name: "Loan sanction letter", sub: "Education loan from any lender", icon: "loan", max: 4,
     drop: "Drop the sanction letter here or <u>browse</u>", hint: "PDF from the lender, or a scan or photo, up to 4 files",
     empty: "The amount in figures is checked against the amount in words, and the instalment periods against the tenure." },
@@ -498,6 +532,7 @@ function choose(t) {
   $("dropTitle").innerHTML = t.drop; $("dropHint").textContent = t.hint;
   input.multiple = t.max > 1;
   $("consentBox").hidden = t.id !== "aadhaar";
+  $("pwBox").hidden = t.id !== "bank_statement";
   if (changed) { chosen = []; renderFiles(); showEmpty(); hideError(); }
 }
 
@@ -539,6 +574,7 @@ $("go").addEventListener("click", async () => {
   chosen.forEach(f => fd.append("files", f));
   fd.append("doc_type", docType.id);
   if (docType.id === "aadhaar" && $("consent").checked) fd.append("consent", "yes");
+  if (docType.id === "bank_statement" && $("pdfPassword").value) fd.append("password", $("pdfPassword").value);
   try {
     const r = await fetch("/api/extract", { method: "POST", body: fd });
     const data = await r.json().catch(() => ({ detail: "The server sent an unreadable reply. Try again." }));
@@ -652,6 +688,7 @@ function renderResult(data) {
   if (data.kind === "aadhaar" || data.kind === "pan") return renderId(data);
   if (data.kind === "ssc") return renderSsc(data);
   if (data.kind === "sanction") return renderSanction(data);
+  if (data.kind === "bank_statement") return renderStatement(data);
   return renderCertificate(data);
 }
 
@@ -810,6 +847,100 @@ function renderSsc(data) {
     title: "10th certificate (SSC)", meta, labels, badKeys: ["date_of_birth", "roll_number"].filter(k => k in reasons),
     sections: [figs, group("Student", student), group("School and result", school),
                group(graded ? "Subjects and grades" : "Subjects and marks", table), notes.length ? notesList(notes) : null],
+  });
+}
+
+/* ---------- bank statement ---------- */
+const money = (n, cur) => blank(n) ? null : (cur && cur !== "INR"
+  ? `${cur} ${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+  : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n));
+const monthName = m => { const [y, mo] = m.split("-"); return new Date(+y, +mo - 1, 1).toLocaleString("en-IN", { month: "short", year: "numeric" }); };
+function renderStatement(data) {
+  const r = data.full, S = r.summary || {}, A = r.account || {}, C = r.checks || {}, cur = A.currency;
+  const meta = [["file", data.file], ["clock", data.seconds + " s"], ["info", r.source ? `Read from ${r.source}` : null]];
+  if (r.document_type !== "bank_statement") {
+    if (r.document_type === "password_protected") { $("pdfPassword").focus(); }
+    return frame(data, { title: r.document_type === "password_protected" ? "This PDF is locked" : "Could not read a bank statement",
+                         meta, sections: [notesList([["bad", r.notes || "Upload a bank statement."]])] });
+  }
+  // the risk level drives the status pill; flags get their own section
+  const risk = S.risk || "low";
+  const view = { ...data, full: { ...r, review: { status: { low: "auto", medium: "review_recommended", high: "manual_required" }[risk],
+                                                   fields_requiring_review: r.flags || [], reasons: {} } } };
+
+  const figs = el("div", { class: "figures", role: "group", "aria-label": "Monthly summary" });
+  const fig = (k, v, cls) => figs.append(el("div", { class: "fig" }, el("div", { class: "k", text: k }),
+    el("div", { class: "n" + (blank(v) ? " dim" : "") + (cls ? " " + cls : ""), text: blank(v) ? "Not found" : v })));
+  fig("Avg monthly income", money(S.avg_monthly_income, cur));
+  fig("Avg monthly expenses", money(S.avg_monthly_expenses, cur));
+  fig("Avg monthly EMI", money(S.avg_monthly_emi, cur));
+  fig("Monthly surplus", money(S.avg_monthly_surplus, cur), S.avg_monthly_surplus >= 0 ? "pos" : "neg");
+
+  const acct = el("dl", { class: "fields" });
+  const recText = C.balance_checked
+    ? `${C.balance_ok} of ${C.balance_checked} rows add up to the running balance (${C.balance_reconciled_percent}%)`
+    : "No running balance printed; debit / credit taken from the statement's own labels";
+  [["Bank", A.bank], ["Account holder", A.holder], ["Account no.", A.account_number], ["IFSC", A.ifsc],
+   ["Period", r.period?.from ? `${fmtDate(r.period.from)} to ${fmtDate(r.period.to)}` : null],
+   ["Transactions", C.transactions], ["Balance check", recText]]
+    .forEach(([label, value]) => row(acct, { label, value, empty: "Not printed",
+      verified: label === "Balance check" && C.balance_checked && C.balance_ok === C.balance_checked,
+      verifiedTip: "Every row: previous balance ± amount = printed balance" }));
+
+  const bank = el("dl", { class: "fields" });
+  [["FOIR (EMIs ÷ income)", S.foir == null ? null : `${Math.round(S.foir * 100)}%`],
+   ["Average balance", money(S.avg_balance, cur)], ["Lowest balance", money(S.min_balance, cur)],
+   ["Bounces / returns", S.bounces], ["Avg money in / month", money(S.avg_monthly_credits, cur)],
+   ["Avg money out / month", money(S.avg_monthly_debits, cur)],
+   ["Months", S.months_covered ? `${S.months_covered} (averages over ${S.months_averaged} full months)` : null]]
+    .forEach(([label, value]) => row(bank, { label, value, empty: "Not available" }));
+
+  const flags = r.flags || [];
+  const fl = el("ul", { class: "flaglist" });
+  flags.forEach(f => fl.append(el("li", { class: f.level }, el("b", {}, icon("alert"), f.level === "high" ? "High" : f.level === "medium" ? "Check" : "Note"),
+    " ", f.text, f.items?.length ? el("pre", { text: f.items.join("\n") }) : null)));
+  if (!flags.length) fl.append(el("li", { class: "low" }, "No red flags found: no bounces, betting payments or unusual credits."));
+
+  const brk = Object.entries(S.expense_breakdown || {}).filter(([, v]) => v > 0);
+  const maxv = Math.max(1, ...brk.map(([, v]) => v));
+  const bars = el("div", { class: "bars" });
+  brk.forEach(([c, v]) => bars.append(el("div", { class: "bar" }, el("span", { text: c }),
+    el("span", { class: "track" }, el("span", { class: "fill", style: `width:${(100 * v / maxv).toFixed(1)}%` })),
+    el("span", { class: "amt", text: money(v, cur) }))));
+
+  const mt = el("tbody");
+  (r.months || []).forEach(m => mt.append(el("tr", {}, el("td", { text: monthName(m.month) }),
+    ...[m.income, m.expenses, m.emi, m.credits, m.debits, m.closing_balance, m.min_balance]
+      .map(v => el("td", { class: "num", text: blank(v) ? "–" : money(v, cur) })))));
+  const monthsTable = el("div", { class: "tablewrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, ...["Month", "Income", "Expenses", "EMI", "Money in", "Money out", "Closing bal.", "Lowest bal."]
+      .map((h, i) => el("th", { class: i ? "num" : "", text: h })))), mt));
+
+  // all transactions, filterable by category
+  const txs = r.transactions || [];
+  const cats = [...new Set(txs.map(t => t.category))].sort();
+  const sel = el("select", { "aria-label": "Filter by category" }, el("option", { value: "", text: `All (${txs.length})` }),
+    ...cats.map(c => el("option", { value: c, text: `${c} (${txs.filter(t => t.category === c).length})` })));
+  const tb = el("tbody");
+  const draw = () => {
+    tb.innerHTML = "";
+    txs.filter(t => !sel.value || t.category === sel.value).slice(0, 2000).forEach(t => tb.append(
+      el("tr", { class: t.balance_check === "mismatch" ? "badrow" : "", title: t.balance_check === "mismatch" ? "Does not add up to the printed balance" : null },
+        el("td", { text: fmtDate(t.date) }), el("td", { text: t.description || "–" }), el("td", { text: t.category }),
+        el("td", { class: "num " + (t.type === "credit" ? "cr" : "dr"), text: (t.type === "credit" ? "+" : t.type === "debit" ? "−" : "?") + Number(t.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 }) }),
+        el("td", { class: "num", text: blank(t.balance) ? "–" : Number(t.balance).toLocaleString("en-IN", { minimumFractionDigits: 2 }) }))));
+  };
+  sel.addEventListener("change", draw);
+  draw();
+  const txTable = el("details", { class: "tx" }, el("summary", { text: `All transactions (${txs.length})` }),
+    el("div", { class: "txfilter" }, el("span", { text: "Category" }), sel),
+    el("div", { class: "tablewrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ...["Date", "Description", "Category", "Amount", "Balance"].map((h, i) => el("th", { class: i >= 3 ? "num" : "", text: h })))), tb)));
+
+  frame(view, {
+    title: "Bank statement", meta,
+    sections: [figs, group(`Red flags · risk ${risk}`, fl), group("Where the money goes (average per month)", brk.length ? bars : notesList([["info", "No spending found."]])),
+               group("Month by month", monthsTable), group("Banker's view", bank), group("Account", acct), txTable],
   });
 }
 
